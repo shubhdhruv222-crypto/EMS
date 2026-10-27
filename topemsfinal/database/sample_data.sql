@@ -1,0 +1,2 @@
+-- Demo data disabled. This file intentionally makes no database changes.
+-- See CLEAN_DATABASE.md.

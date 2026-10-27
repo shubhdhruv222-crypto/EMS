@@ -1,0 +1,14 @@
+<?php
+require __DIR__.'/../includes/bootstrap.php'; require __DIR__.'/../includes/layout.php';$user=require_role('admin');$error='';
+if (post()) { check_csrf();try {
+ $id=record_id($_POST['id']??'');$reply=text_value('reply',2000,false);$status=text_value('status',20);
+ if (!in_array($status,['Pending','Reviewed','Resolved'],true)) throw new InvalidArgumentException('Invalid status.');
+ $q=db()->prepare('SELECT id FROM feedback WHERE id=?');$q->execute([$id]);if (!$q->fetch()) missing();
+ $q=db()->prepare('UPDATE feedback SET reply=?,status=?,updated_at=CURRENT_TIMESTAMP WHERE id=?');$q->execute([$reply,$status,$id]);flash('Response and status saved.');redirect('admin/feedback.php');
+ } catch (InvalidArgumentException $e) { $error=$e->getMessage(); }
+}
+$search=trim(is_string($_GET['q']??null)?$_GET['q']:'');$status=is_string($_GET['status']??null)?$_GET['status']:'';
+$sql='SELECT f.*,u.full_name,u.employee_code FROM feedback f JOIN users u ON u.id=f.employee_id WHERE (u.full_name LIKE ? OR f.message LIKE ? OR u.employee_code LIKE ?)';$args=array_fill(0,3,'%'.$search.'%');
+if (in_array($status,['Pending','Reviewed','Resolved'],true)) { $sql.=' AND f.status=?';$args[]=$status; }
+$q=db()->prepare($sql.' ORDER BY f.id DESC');$q->execute($args);$rows=$q->fetchAll();page_start('Employee Feedback',$user);if ($error) echo '<p class="notice error-notice">'.h($error).'</p>';
+?><section class="card"><form method="get"><div class="form-grid"><?php input_field('q','Search name, employee ID or message',$search,'text',false); ?><div class="form-group"><label for="status">Status</label><select id="status" name="status" class="form-control"><option value="">All statuses</option><?php foreach (['Pending','Reviewed','Resolved'] as $s): ?><option <?=$s===$status?'selected':''?>><?=h($s)?></option><?php endforeach; ?></select></div></div><button class="btn btn-primary">Search</button></form><?php if (!$rows): ?><p>No feedback found.</p><?php endif; foreach ($rows as $f): ?><article class="feedback-item"><h3><?=h($f['full_name'])?> · <?=h($f['category'])?></h3><p class="feedback-meta"><?=h($f['employee_code'])?> · <?=h($f['created_at'])?> · <?=h($f['status'])?></p><p><?=h($f['message'])?></p><form method="post"><?=csrf_field()?><input type="hidden" name="id" value="<?=(int)$f['id']?>"><label for="reply-<?=(int)$f['id']?>">Admin response</label><textarea id="reply-<?=(int)$f['id']?>" name="reply" class="form-control" rows="3" maxlength="2000"><?=h($f['reply'])?></textarea><label for="status-<?=(int)$f['id']?>">Status</label><select id="status-<?=(int)$f['id']?>" name="status" class="form-control"><?php foreach (['Pending','Reviewed','Resolved'] as $s): ?><option <?=$s===$f['status']?'selected':''?>><?=h($s)?></option><?php endforeach; ?></select><button class="btn btn-primary">Save Response</button></form></article><?php endforeach; ?></section><?php page_end();
